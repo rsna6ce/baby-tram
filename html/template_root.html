@@ -1,0 +1,50 @@
+  <!DOCTYPE html>
+  <html lang='en'>
+  <head>
+  <meta charset='utf-8'>
+  <title>baby-trum</title>
+  <style> .center{ width:480px; margin: 0 auto; } progress{ height:30px;} button {width:5em; height:2em;}</style>
+  </head>
+  <body>
+   <div class='center'>
+  <h2>baby trum</h2>
+   <table cellpadding='1' >
+    <tr>
+      <td> <button type='button' onclick=set_value('run',1)> <b>RUN</b> </button></td>
+      <td> <button type='button' onclick=set_value('run',0)> <b>STOP</b> </button></td>
+      <td><p id='run'><b><font size='5'> STOP </font></b></p></td>
+    </tr>
+    <tr>
+      <td> <button type='button' onclick=set_value('power',-5)> <b>－</b> </button></td>
+      <td> <button type='button' onclick=set_value('power',5)>  <b>＋</b> </button></td>
+      <td> <progress id='power_progress' value='55' min='0' max='100'></progress></td>
+      <td><p id='power_value'><b><font size='5'> power 55% </font></b></p></td>
+    </tr>
+  </table>
+  </div>
+  </body>
+  <script language='javascript' type='text/javascript'>
+  function set_value(item, value) {
+    var request = new XMLHttpRequest();
+    request.open('GET', '/api?item=' + item + '&value=' + value , true);
+    request.responseType = 'json';
+    request.onload = function () {
+            let data = this.response;
+            let result = data.result;
+            let item = data.item;
+            let value = data.value;
+            if (result!='OK') {
+                alert('ERROR');
+            } else if (item=='run') {
+                document.getElementById('run').textContent = value;
+            } else if (item=='power') {
+                document.getElementById('power_progress').value = value;
+                document.getElementById('power_value').textContent = 'power ' + value + '%';
+            }
+        };
+    request.onerror = function () {
+      alert('ERROR');
+    };
+    request.send();
+  }
+  </script>
