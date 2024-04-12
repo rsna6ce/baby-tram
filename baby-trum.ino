@@ -18,9 +18,7 @@ static int wifi_status = WL_DISCONNECTED;
 const int pinSW = 0;
 const int pinLED = 2;
 const int pin_f = 26;
-const int pin_b = 27;
 const int pwm_ch_f = 1;
-const int pwm_ch_b = 2;
 const int pwm_freq = 10;
 const int pwm_bit = 8;
 const int pwm_max = (1 << pwm_bit);
@@ -83,9 +81,7 @@ void setup()
     pinMode(pinSW, INPUT_PULLUP);
     pinMode(pinLED, OUTPUT);
     pinMode(pin_f, OUTPUT);
-    pinMode(pin_b, OUTPUT);
     digitalWrite(pin_f, LOW);
-    digitalWrite(pin_b, LOW);
     // setup pwm
     ledcSetup(pwm_ch_f, pwm_freq, pwm_bit);
     ledcAttachPin(pin_f, pwm_ch_f);
