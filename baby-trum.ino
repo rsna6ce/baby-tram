@@ -19,7 +19,7 @@ const int pinSW = 0;
 const int pinLED = 2;
 const int pin_f = 26;
 const int pwm_ch_f = 1;
-const int pwm_freq = 10;
+const int pwm_freq = 50;
 const int pwm_bit = 8;
 const int pwm_max = (1 << pwm_bit);
 
