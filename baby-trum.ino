@@ -169,32 +169,40 @@ static int status_running = 0;
 static int status_power = 0;
 void handleRoot() {
     digitalWrite(pinLED, HIGH);
-    String status_running_str = status_running!=0 ? "run" : "stop";
+    String status_running_str = status_running!=0 ? "RUN" : "STOP";
     String status_power_str = String(status_power);
     String index_html =
         "  <!DOCTYPE html>\n"
         "  <html lang='en'>\n"
         "  <head>\n"
-        "  <meta charset='utf-8'>\n"
-        "  <title>baby-trum</title>\n"
-        "  <style> .center{ width:480px; margin: 0 auto; } progress{ height:30px;} button {width:5em; height:2em;} table{height:30;padding:0;}</style>\n"
+        "    <meta charset='utf-8'>\n"
+        "    <title>baby-trum</title>\n"
+        "    <style>\n"
+        "      .center{ width:480px; margin: 0 auto; }\n"
+        "      progress{ width:125px; height:30px;}\n"
+        "      button {width:60px; height:30px;\n"
+        "      border:none; color:#FFF;\n"
+        "      background:#0d6efd; border-radius:5px;}\n"
+        "      p{height:2em; margin-block-start:0px; margin-block-end:0px;}\n"
+        "    </style>\n"
         "  </head>\n"
         "  <body>\n"
-        "   <div class='center'>\n"
-        "  <h2>baby trum</h2>\n"
-        "   <table cellpadding='1' >\n"
-        "    <tr>\n"
-        "      <td> <button type='button' onclick=set_value('run',1)> <b>RUN</b> </button></td>\n"
-        "      <td> <button type='button' onclick=set_value('run',0)> <b>STOP</b> </button></td>\n"
-        "      <td><b><font size='5'><p id='run'> " + status_running_str + " </p></font></b></td>\n"
-        "    </tr>\n"
-        "    <tr>\n"
-        "      <td> <button type='button' onclick=set_value('power',-5)> <b>－</b> </button></td>\n"
-        "      <td> <button type='button' onclick=set_value('power',5)>  <b>＋</b> </button></td>\n"
-        "      <td> <progress id='power_progress' value='" + status_power_str + "' min='0' max='100'>" + status_power_str + "%</progress></td>\n"
-        "      <td><b><font size='5'><p id='power_value'> power" + status_power_str + "% </p></font></b></td>\n"
-        "    </tr>\n"
-        "  </table>\n"
+        "    <div class='center'>\n"
+        "      <h2>baby trum</h2>\n"
+        "      <p><nobr>\n"
+        "        <button type='button' onclick=set_value('run',1)> <b>RUN</b> </button>\n"
+        "        <button type='button' onclick=set_value('run',0)> <b>STOP</b> </button>\n"
+        "      </nobr></p>\n"
+        "      <b><font size='5'><a id='run'> " + status_running_str + " </a></font></b>\n"
+        "      <hr>\n"
+        "      <p><nobr>\n"
+        "        <button type='button' onclick=set_value('power',-5)> <b>－</b> </button>\n"
+        "        <button type='button' onclick=set_value('power',5)>  <b>＋</b> </button>\n"
+        "      </nobr></p>\n"
+        "      <b><font size='5'><a id='power_value'> POW:" + status_power_str + "% </a></font></b>\n"
+        "      <p>\n"
+        "        <progress id='power_progress' value='" + status_power_str + "' min='0' max='100'>0</progress>\n"
+        "      </p>\n"
         "  </div>\n"
         "  </body>\n"
         "  <script language='javascript' type='text/javascript'>\n"
@@ -213,7 +221,7 @@ void handleRoot() {
         "                document.getElementById('run').textContent = value;\n"
         "            } else if (item=='power') {\n"
         "                document.getElementById('power_progress').value = value;\n"
-        "                document.getElementById('power_value').textContent = 'power ' + value + '%';\n"
+        "                document.getElementById('power_value').textContent = 'POW:' + value + '%';\n"
         "            }\n"
         "        };\n"
         "    request.onerror = function () {\n"
@@ -227,6 +235,7 @@ void handleRoot() {
 }
 
 void handleApi() {
+    digitalWrite(pinLED, HIGH);
     String item_str = server.arg("item");
     String value_str = server.arg("value");
     int value = value_str.toInt();
@@ -246,6 +255,7 @@ void handleApi() {
     }
     //Serial.println(res);
     server.send(200, "application/json", res);
+    digitalWrite(pinLED, LOW);
 }
 
 void handleNotFound() {
@@ -258,7 +268,12 @@ static int current_power = 0;
 void loop2(void * params) {
     while (true) {
         int target_power = status_power * status_running;
-        if (current_power < target_power) {
+        if (current_power == target_power) {
+            // do nothing
+        } else if (target_power==0){
+            current_power = 0;
+            ledcWrite(pwm_ch_f, current_power);
+        } else if (current_power < target_power) {
             current_power++;
             Serial.print("current_power");
             Serial.println(current_power);

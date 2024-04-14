@@ -1,26 +1,36 @@
   <!DOCTYPE html>
   <html lang='en'>
   <head>
-  <meta charset='utf-8'>
-  <title>baby-trum</title>
-  <style> .center{ width:480px; margin: 0 auto; } progress{ height:30px;} button {width:5em; height:2em;}</style>
+    <meta charset='utf-8'>
+    <title>baby-trum</title>
+    <style>
+      .center{ width:480px; margin: 0 auto; }
+      progress{ width:125px; height:30px;}
+      button {width:60px; height:30px;
+      border:none; color:#FFF;
+      background:#0d6efd; border-radius:5px;}
+      p{height:2em; margin-block-start:0px; margin-block-end:0px;}
+    </style>
   </head>
   <body>
-   <div class='center'>
-  <h2>baby trum</h2>
-   <table cellpadding='1' >
-    <tr>
-      <td> <button type='button' onclick=set_value('run',1)> <b>RUN</b> </button></td>
-      <td> <button type='button' onclick=set_value('run',0)> <b>STOP</b> </button></td>
-      <td><p id='run'><b><font size='5'> STOP </font></b></p></td>
-    </tr>
-    <tr>
-      <td> <button type='button' onclick=set_value('power',-5)> <b>－</b> </button></td>
-      <td> <button type='button' onclick=set_value('power',5)>  <b>＋</b> </button></td>
-      <td> <progress id='power_progress' value='55' min='0' max='100'></progress></td>
-      <td><p id='power_value'><b><font size='5'> power 55% </font></b></p></td>
-    </tr>
-  </table>
+    <div class='center'>
+      <h2>baby trum</h2>
+      <p><nobr>
+        <button type='button' onclick=set_value('run',1)> <b>RUN</b> </button>
+        <button type='button' onclick=set_value('run',0)> <b>STOP</b> </button>
+      </nobr></p>
+      <b><font size='5'><a id='run'> STOP </a></font></b>
+
+      <hr>
+
+      <p><nobr>
+        <button type='button' onclick=set_value('power',-5)> <b>－</b> </button>
+        <button type='button' onclick=set_value('power',5)>  <b>＋</b> </button>
+      </nobr></p>
+      <b><font size='5'><a id='power_value'> POW:0% </a></font></b>
+      <p>
+        <progress id='power_progress' value='0' min='0' max='100'>0</progress>
+      </p>
   </div>
   </body>
   <script language='javascript' type='text/javascript'>
@@ -39,7 +49,7 @@
                 document.getElementById('run').textContent = value;
             } else if (item=='power') {
                 document.getElementById('power_progress').value = value;
-                document.getElementById('power_value').textContent = 'power ' + value + '%';
+                document.getElementById('power_value').textContent = 'POW:' + value + '%';
             }
         };
     request.onerror = function () {
