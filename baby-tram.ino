@@ -75,7 +75,7 @@ void input_ssid_pass(char* ssid, char* pass) {
 void setup()
 {
     Serial.begin(115200);
-    Serial.println("hello. baby  trum.");
+    Serial.println("hello. baby  tram.");
 
     // setup pins
     pinMode(pinSW, INPUT_PULLUP);
@@ -176,7 +176,7 @@ void handleRoot() {
         "  <html lang='en'>\n"
         "  <head>\n"
         "    <meta charset='utf-8'>\n"
-        "    <title>baby-trum</title>\n"
+        "    <title>baby-tram</title>\n"
         "    <style>\n"
         "      .center{ width:480px; margin: 0 auto; }\n"
         "      progress{ width:125px; height:30px;}\n"
@@ -188,7 +188,7 @@ void handleRoot() {
         "  </head>\n"
         "  <body>\n"
         "    <div class='center'>\n"
-        "      <h2>baby trum</h2>\n"
+        "      <h2>baby tram</h2>\n"
         "      <p><nobr>\n"
         "        <button type='button' onclick=set_value('run',1)> <b>RUN</b> </button>\n"
         "        <button type='button' onclick=set_value('run',0)> <b>STOP</b> </button>\n"
