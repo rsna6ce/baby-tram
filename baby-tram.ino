@@ -266,6 +266,29 @@ void handleNotFound() {
 
 static int current_power = 0;
 void loop2(void * params) {
+    const int pinLedR = 16;
+    const int pinLedG = 18;
+    const int pinLedB = 27;
+    const int pinLedY = 33;
+    const int pinLedP = 21;
+    const int DRAIN_LED_ON = 0;
+    const int DRAIN_LED_OFF = 1;
+    const int pinMagL = 36;
+    const int pinMagR = 39;
+    pinMode(pinLedR, OUTPUT_OPEN_DRAIN);
+    pinMode(pinLedG, OUTPUT_OPEN_DRAIN);
+    pinMode(pinLedB, OUTPUT_OPEN_DRAIN);
+    pinMode(pinLedY, OUTPUT_OPEN_DRAIN);
+    pinMode(pinLedP, OUTPUT_OPEN_DRAIN);
+    pinMode(pinMagL, ANALOG);
+    pinMode(pinMagR, ANALOG);
+    const int threshold_n = 2050;
+    const int threshold_s = 1800;
+    digitalWrite(pinLedR, DRAIN_LED_OFF);
+    digitalWrite(pinLedG, DRAIN_LED_OFF);
+    digitalWrite(pinLedB, DRAIN_LED_OFF);
+    digitalWrite(pinLedY, DRAIN_LED_OFF);
+    digitalWrite(pinLedP, DRAIN_LED_OFF);
     while (true) {
         int target_power = status_power * status_running;
         if (current_power == target_power) {
@@ -285,6 +308,29 @@ void loop2(void * params) {
             ledcWrite(pwm_ch_f, (pwm_max * current_power) / 100);
         }
         delay(10);
+
+        int mgl = analogRead(pinMagL);
+        if (mgl < threshold_s) {
+            digitalWrite(pinLedR, DRAIN_LED_ON);
+            digitalWrite(pinLedG, DRAIN_LED_OFF);
+        } else if (threshold_n < mgl) {
+            digitalWrite(pinLedR, DRAIN_LED_OFF);
+            digitalWrite(pinLedG, DRAIN_LED_ON);
+        } else {
+            digitalWrite(pinLedR, DRAIN_LED_OFF);
+            digitalWrite(pinLedG, DRAIN_LED_OFF);
+        }
+        int mgr = analogRead(pinMagR);
+        if (mgr < threshold_s) {
+            digitalWrite(pinLedB, DRAIN_LED_ON);
+            digitalWrite(pinLedY, DRAIN_LED_OFF);
+        } else if (threshold_n < mgr) {
+            digitalWrite(pinLedB, DRAIN_LED_OFF);
+            digitalWrite(pinLedY, DRAIN_LED_ON);
+        } else {
+            digitalWrite(pinLedB, DRAIN_LED_OFF);
+            digitalWrite(pinLedY, DRAIN_LED_OFF);
+        }
     }
 }
 
