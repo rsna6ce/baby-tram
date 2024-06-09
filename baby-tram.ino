@@ -263,9 +263,34 @@ void handleNotFound() {
   server.send(404, "text/plain", "404 page not found.");
   digitalWrite(pinLED, LOW);
 }
-
+static int led_index = 0;
+static int led_timer = 0;
+static const int led_timer_interval = 200;
 static int current_power = 0;
 void loop2(void * params) {
+    const int pinLedR = 16;
+    const int pinLedG = 18;
+    const int pinLedB = 27;
+    const int pinLedY = 33;
+    const int pinLedP = 21;
+    const int DRAIN_LED_ON = 0;
+    const int DRAIN_LED_OFF = 1;
+    const int pinAD1 = 36;
+    const int pinAD2 = 39;
+    char output[32] = {};
+    const int led_list[] = {
+        pinLedR,
+        pinLedG,
+        pinLedP,
+        pinLedY,
+        pinLedB};
+    pinMode(pinLedR, OUTPUT_OPEN_DRAIN);
+    pinMode(pinLedG, OUTPUT_OPEN_DRAIN);
+    pinMode(pinLedB, OUTPUT_OPEN_DRAIN);
+    pinMode(pinLedY, OUTPUT_OPEN_DRAIN);
+    pinMode(pinLedP, OUTPUT_OPEN_DRAIN);
+    pinMode(pinAD1, ANALOG);
+    pinMode(pinAD2, ANALOG);
     while (true) {
         int target_power = status_power * status_running;
         if (current_power == target_power) {
@@ -285,6 +310,24 @@ void loop2(void * params) {
             ledcWrite(pwm_ch_f, (pwm_max * current_power) / 100);
         }
         delay(10);
+        
+        led_timer += 10;
+        if (led_timer > led_timer_interval) {
+            led_timer = 0;
+            led_index = (led_index + 1) % 5;
+        } else {
+            for (int i=0 ;i<5; i++) {
+                if (i==led_index) {
+                    digitalWrite(led_list[i], DRAIN_LED_ON);
+                } else {
+                    digitalWrite(led_list[i], DRAIN_LED_OFF);
+                }
+            }
+        }
+        int ad1 = analogRead(pinAD1);
+        int ad2 = analogRead(pinAD2);
+        sprintf(output, "%04d, %04d", ad1, ad2);
+        Serial.println(output);
     }
 }
 
