@@ -2,7 +2,7 @@
   <html lang='en'>
   <head>
     <meta charset='utf-8'>
-    <title>baby-tram</title>
+    <title>baby-tram magma</title>
     <style>
       .center{ width:480px; margin: 0 auto; }
       progress{ width:125px; height:30px;}
@@ -10,6 +10,8 @@
       border:none; color:#FFF;
       background:#0d6efd; border-radius:5px;}
       p{height:2em; margin-block-start:0px; margin-block-end:0px;}
+      select{width:60; height:30px;}
+    }
     </style>
   </head>
   <body>
@@ -23,14 +25,35 @@
 
       <hr>
 
-      <p><nobr>
-        <button type='button' onclick=set_value('power',-5)> <b>－</b> </button>
-        <button type='button' onclick=set_value('power',5)>  <b>＋</b> </button>
-      </nobr></p>
-      <b><font size='5'><a id='power_value'> POW:0% </a></font></b>
-      <p>
-        <progress id='power_progress' value='0' min='0' max='100'>0</progress>
-      </p>
+    <p><nobr>
+    <a>File No.</a>
+    <select id='filenumber'>
+    <option value=1>1</option> <option value=2>2</option> <option value=3>3</option> <option value=4>4</option> <option value=5>5</option>
+    <option value=6>6</option> <option value=7>7</option> <option value=8>8</option> <option value=9>9</option> <option value=10>10</option>
+    </select>
+    <button type='button' onclick=load_table()> <b>load</b> </button>
+    <button type='button' onclick=save_table()> <b>save</b> </button>
+    </nobr></p>
+
+    <br>
+
+    <p><nobr>
+    <a>Desc.</a>
+    <input type='text' id='description'size='34' />
+    </nobr></p>
+    <table border='1' style='border: 1px solid black; border-collapse: collapse;' id='table'>
+    <thead>
+    <tr bgcolor='#eeeeee'>
+        <td>color(r/g/b/y)</td>
+        <td>brake[ms]</td>
+        <td>power[%]</td>
+        <td>delete</td>
+    </tr>
+    </thead>
+    <tbody id='tbody'>
+    <tbody>
+    </table>
+    <a href='javascript:add_row(\"g\", 0, 50);'>add[+]</a>
   </div>
   </body>
   <script language='javascript' type='text/javascript'>
@@ -56,5 +79,104 @@
       alert('ERROR');
     };
     request.send();
+  }
+  function add_row(color, brake, poower) {
+    var tb = document.getElementById('tbody');
+    var tr = document.createElement('tr');
+    var init_values = [color, brake, poower];
+    var init_attr = ['center','right','right']
+    for (let i=0; i<3; i++) {
+        var td = document.createElement('td');
+        td.textContent = init_values[i];
+        td.setAttribute('contenteditable', 'true');
+        td.setAttribute('align', init_attr[i])
+        tr.appendChild(td);
+    }
+    var td = document.createElement('td');
+    td.innerHTML = '<a href=\"javascript:void(0);\">[x]</a>';
+    td.setAttribute('onclick', 'this.parentNode.outerHTML = \"\"');
+    td.setAttribute('align', 'center')
+    tr.appendChild(td);
+    tb.appendChild(tr);
+  }
+  function load_table() {
+    let filenumber = document.getElementById('filenumber').value;
+    var request = new XMLHttpRequest();
+    request.open('POST', '/api/table/load', true);
+    request.responseType = 'json';
+    request.setRequestHeader('Content-Type', 'application/json');
+    request.onload = function () {
+            let data = this.response;
+            let result = data.result;
+            let description = data.description;
+            let table = data.table;
+            let value = data.value;
+            if (result!='OK') {
+                alert('ERROR');
+            } else {
+                document.getElementById('description').value = description;
+                let tb = document.getElementById('tbody');
+                while (tb.rows.length > 0) tb.deleteRow(0);
+                for (let row of table) {
+                    add_row(row[0], row[1], row[2]);
+                }
+            }
+        };
+    request.onerror = function () {
+      alert('ERROR');
+    };
+    let data ={'filenumber': filenumber};
+    let json_str = JSON.stringify(data);
+    request.send(json_str);
+  }
+  function save_table() {
+    let filenumber = document.getElementById('filenumber').value;
+    let description = document.getElementById('description').value;
+
+    if (false == window.confirm(filenumber + ':' + description + '\\n' + 'save ok ?')) {
+        return;
+    }
+
+    let tb = document.getElementById('tbody');
+    const col_limit = 3;
+    let rows = [];
+    for (let row of tb.rows) {
+        let cols = [];
+        let col_num = 0;
+        for(let cell of row.cells){
+            col_num += 1;
+            if (col_num <= col_limit) {
+                cols.push(cell.innerText);
+            }
+            console.log(cell.innerText);
+        }
+        rows.push(cols);
+    }
+    console.log(rows);
+
+    var request = new XMLHttpRequest();
+    request.open('POST', '/api/table/save', true);
+    request.responseType = 'json';
+    request.setRequestHeader('Content-Type', 'application/json');
+    request.onload = function () {
+            let data = this.response;
+            let result = data.result;
+            let item = data.item;
+            let value = data.value;
+            if (result!='OK') {
+                alert('ERROR');
+            } else if (item=='run') {
+                document.getElementById('run').textContent = value;
+            } else if (item=='power') {
+                document.getElementById('power_progress').value = value;
+                document.getElementById('power_value').textContent = 'POW:' + value + '%';
+            }
+        };
+    request.onerror = function () {
+      alert('ERROR');
+    };
+    let data ={'filenumber':filenumber, 'description': description, 'table':rows};
+    let json_str = JSON.stringify(data);
+    request.send(json_str);
   }
   </script>

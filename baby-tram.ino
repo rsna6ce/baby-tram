@@ -4,6 +4,10 @@
 #include <ESPmDNS.h>
 #include "wps_example.h"
 #include "esp_wps.h"
+#include <ArduinoJson.h>
+#include <FS.h>
+#include <SPIFFS.h>
+#include <stdint.h>
 
 //static ssid and pass (if not use set "")
 static char* ssid = "";
@@ -29,6 +33,8 @@ String current_ipaddr = "";
 #define WIFI_TIMEOUT_SEC 10
 #define WPS_TIMEOUT 120
 
+StaticJsonDocument<1024> jsondoc_temp;  //for decode
+StaticJsonDocument<1024> jsondoc_table; //for table
 
 // Serial.readStringUntil do now work in ESP32...
 String SerialReasStringUntilCRLF() {
@@ -157,81 +163,309 @@ void setup()
         esp_restart();
     }
 
+    SPIFFS.begin(true);
+
     server.on("/", handleRoot);
     server.on("/api",handleApi);
+    server.on("/api/run/start", handleApiRunStart);
+    server.on("/api/run/stop", handleApiRunStop);
+    server.on("/api/table/load", handleApiTableLoad);
+    server.on("/api/table/save", handleApiTableSave);
     server.onNotFound(handleNotFound);
     server.begin();
 
     xTaskCreatePinnedToCore(loop2, "loop2", 4096, NULL, 1, NULL, 0);
 }
 
-static int status_running = 0;
-static int status_power = 0;
+static uint32_t status_running = 0;
+static uint32_t status_power = 0;
+static uint32_t status_section_id = 0;
+static uint32_t status_section_count = 0;
+static uint32_t status_section_elapsedtime = 0;
 void handleRoot() {
     digitalWrite(pinLED, HIGH);
     String status_running_str = status_running!=0 ? "RUN" : "STOP";
-    String status_power_str = String(status_power);
     String index_html =
-        "  <!DOCTYPE html>\n"
-        "  <html lang='en'>\n"
-        "  <head>\n"
-        "    <meta charset='utf-8'>\n"
-        "    <title>baby-tram</title>\n"
-        "    <style>\n"
-        "      .center{ width:480px; margin: 0 auto; }\n"
-        "      progress{ width:125px; height:30px;}\n"
-        "      button {width:60px; height:30px;\n"
-        "      border:none; color:#FFF;\n"
-        "      background:#0d6efd; border-radius:5px;}\n"
-        "      p{height:2em; margin-block-start:0px; margin-block-end:0px;}\n"
-        "    </style>\n"
-        "  </head>\n"
-        "  <body>\n"
-        "    <div class='center'>\n"
-        "      <h2>baby tram</h2>\n"
-        "      <p><nobr>\n"
-        "        <button type='button' onclick=set_value('run',1)> <b>RUN</b> </button>\n"
-        "        <button type='button' onclick=set_value('run',0)> <b>STOP</b> </button>\n"
-        "      </nobr></p>\n"
-        "      <b><font size='5'><a id='run'> " + status_running_str + " </a></font></b>\n"
-        "      <hr>\n"
-        "      <p><nobr>\n"
-        "        <button type='button' onclick=set_value('power',-5)> <b>－</b> </button>\n"
-        "        <button type='button' onclick=set_value('power',5)>  <b>＋</b> </button>\n"
-        "      </nobr></p>\n"
-        "      <b><font size='5'><a id='power_value'> POW:" + status_power_str + "% </a></font></b>\n"
-        "      <p>\n"
-        "        <progress id='power_progress' value='" + status_power_str + "' min='0' max='100'>0</progress>\n"
-        "      </p>\n"
-        "  </div>\n"
-        "  </body>\n"
-        "  <script language='javascript' type='text/javascript'>\n"
-        "  function set_value(item, value) {\n"
-        "    var request = new XMLHttpRequest();\n"
-        "    request.open('GET', '/api?item=' + item + '&value=' + value , true);\n"
-        "    request.responseType = 'json';\n"
-        "    request.onload = function () {\n"
-        "            let data = this.response;\n"
-        "            let result = data.result;\n"
-        "            let item = data.item;\n"
-        "            let value = data.value;\n"
-        "            if (result!='OK') {\n"
-        "                alert('ERROR');\n"
-        "            } else if (item=='run') {\n"
-        "                document.getElementById('run').textContent = value;\n"
-        "            } else if (item=='power') {\n"
-        "                document.getElementById('power_progress').value = value;\n"
-        "                document.getElementById('power_value').textContent = 'POW:' + value + '%';\n"
-        "            }\n"
-        "        };\n"
-        "    request.onerror = function () {\n"
-        "      alert('ERROR');\n"
-        "    };\n"
-        "    request.send();\n"
-        "  }\n"
-        "  </script>\n";
+"  <!DOCTYPE html>\n"
+"  <html lang='en'>\n"
+"  <head>\n"
+"    <meta charset='utf-8'>\n"
+"    <title>baby-tram magma</title>\n"
+"    <style>\n"
+"      .center{ width:480px; margin: 0 auto; }\n"
+"      progress{ width:125px; height:30px;}\n"
+"      button {width:60px; height:30px;\n"
+"      border:none; color:#FFF;\n"
+"      background:#0d6efd; border-radius:5px;}\n"
+"      p{height:2em; margin-block-start:0px; margin-block-end:0px;}\n"
+"      select{width:60; height:30px;}\n"
+"    }\n"
+"    </style>\n"
+"  </head>\n"
+"  <body>\n"
+"    <div class='center'>\n"
+"      <h2>baby tram</h2>\n"
+"      <p><nobr>\n"
+"        <button type='button' onclick=set_value('run',1)> <b>RUN</b> </button>\n"
+"        <button type='button' onclick=set_value('run',0)> <b>STOP</b> </button>\n"
+"      </nobr></p>\n"
+"      <b><font size='5'><a id='run'> STOP </a></font></b>\n"
+"      <hr>\n"
+"    <p><nobr>\n"
+"    <a>File No.</a>\n"
+"    <select id='filenumber'>\n"
+"    <option value=1>1</option> <option value=2>2</option> <option value=3>3</option> <option value=4>4</option> <option value=5>5</option>\n"
+"    <option value=6>6</option> <option value=7>7</option> <option value=8>8</option> <option value=9>9</option> <option value=10>10</option>\n"
+"    </select>\n"
+"    <button type='button' onclick=load_table()> <b>load</b> </button>\n"
+"    <button type='button' onclick=save_table()> <b>save</b> </button>\n"
+"    </nobr></p>\n"
+"    <br>\n"
+"    <p><nobr>\n"
+"    <a>Desc.</a>\n"
+"    <input type='text' id='description'size='34' />\n"
+"    </nobr></p>\n"
+"    <table border='1' style='border: 1px solid black; border-collapse: collapse;' id='table'>\n"
+"    <thead>\n"
+"    <tr bgcolor='#eeeeee'>\n"
+"        <td>color(r/g/b/y)</td>\n"
+"        <td>brake[ms]</td>\n"
+"        <td>power[%]</td>\n"
+"        <td>delete</td>\n"
+"    </tr>\n"
+"    </thead>\n"
+"    <tbody id='tbody'>\n"
+"    <tbody>\n"
+"    </table>\n"
+"    <a href='javascript:add_row(\"g\", 0, 50);'>add[+]</a>\n"
+"  </div>\n"
+"  </body>\n"
+"  <script language='javascript' type='text/javascript'>\n"
+"  function set_value(item, value) {\n"
+"    var request = new XMLHttpRequest();\n"
+"    request.open('GET', '/api?item=' + item + '&value=' + value , true);\n"
+"    request.responseType = 'json';\n"
+"    request.onload = function () {\n"
+"            let data = this.response;\n"
+"            let result = data.result;\n"
+"            let item = data.item;\n"
+"            let value = data.value;\n"
+"            if (result!='OK') {\n"
+"                alert('ERROR');\n"
+"            } else if (item=='run') {\n"
+"                document.getElementById('run').textContent = value;\n"
+"            } else if (item=='power') {\n"
+"                document.getElementById('power_progress').value = value;\n"
+"                document.getElementById('power_value').textContent = 'POW:' + value + '%';\n"
+"            }\n"
+"        };\n"
+"    request.onerror = function () {\n"
+"      alert('ERROR');\n"
+"    };\n"
+"    request.send();\n"
+"  }\n"
+"  function add_row(color, brake, poower) {\n"
+"    var tb = document.getElementById('tbody');\n"
+"    var tr = document.createElement('tr');\n"
+"    var init_values = [color, brake, poower];\n"
+"    var init_attr = ['center','right','right']\n"
+"    for (let i=0; i<3; i++) {\n"
+"        var td = document.createElement('td');\n"
+"        td.textContent = init_values[i];\n"
+"        td.setAttribute('contenteditable', 'true');\n"
+"        td.setAttribute('align', init_attr[i])\n"
+"        tr.appendChild(td);\n"
+"    }\n"
+"    var td = document.createElement('td');\n"
+"    td.innerHTML = '<a href=\"javascript:void(0);\">[x]</a>';\n"
+"    td.setAttribute('onclick', 'this.parentNode.outerHTML = \"\"');\n"
+"    td.setAttribute('align', 'center')\n"
+"    tr.appendChild(td);\n"
+"    tb.appendChild(tr);\n"
+"  }\n"
+"  function load_table() {\n"
+"    let filenumber = document.getElementById('filenumber').value;\n"
+"    var request = new XMLHttpRequest();\n"
+"    request.open('POST', '/api/table/load', true);\n"
+"    request.responseType = 'json';\n"
+"    request.setRequestHeader('Content-Type', 'application/json');\n"
+"    request.onload = function () {\n"
+"            let data = this.response;\n"
+"            let result = data.result;\n"
+"            let description = data.description;\n"
+"            let table = data.table;\n"
+"            let value = data.value;\n"
+"            if (result!='OK') {\n"
+"                alert('ERROR');\n"
+"            } else {\n"
+"                document.getElementById('description').value = description;\n"
+"                let tb = document.getElementById('tbody');\n"
+"                while (tb.rows.length > 0) tb.deleteRow(0);\n"
+"                for (let row of table) {\n"
+"                    add_row(row[0], row[1], row[2]);\n"
+"                }\n"
+"            }\n"
+"        };\n"
+"    request.onerror = function () {\n"
+"      alert('ERROR');\n"
+"    };\n"
+"    let data ={'filenumber': filenumber};\n"
+"    let json_str = JSON.stringify(data);\n"
+"    request.send(json_str);\n"
+"  }\n"
+"  function save_table() {\n"
+"    let filenumber = document.getElementById('filenumber').value;\n"
+"    let description = document.getElementById('description').value;\n"
+"    if (false == window.confirm(filenumber + ':' + description + '\\n' + 'save ok ?')) {\n"
+"        return;\n"
+"    }\n"
+"    let tb = document.getElementById('tbody');\n"
+"    const col_limit = 3;\n"
+"    let rows = [];\n"
+"    for (let row of tb.rows) {\n"
+"        let cols = [];\n"
+"        let col_num = 0;\n"
+"        for(let cell of row.cells){\n"
+"            col_num += 1;\n"
+"            if (col_num <= col_limit) {\n"
+"                cols.push(cell.innerText);\n"
+"            }\n"
+"            console.log(cell.innerText);\n"
+"        }\n"
+"        rows.push(cols);\n"
+"    }\n"
+"    console.log(rows);\n"
+"    var request = new XMLHttpRequest();\n"
+"    request.open('POST', '/api/table/save', true);\n"
+"    request.responseType = 'json';\n"
+"    request.setRequestHeader('Content-Type', 'application/json');\n"
+"    request.onload = function () {\n"
+"            let data = this.response;\n"
+"            let result = data.result;\n"
+"            let item = data.item;\n"
+"            let value = data.value;\n"
+"            if (result!='OK') {\n"
+"                alert('ERROR');\n"
+"            } else if (item=='run') {\n"
+"                document.getElementById('run').textContent = value;\n"
+"            } else if (item=='power') {\n"
+"                document.getElementById('power_progress').value = value;\n"
+"                document.getElementById('power_value').textContent = 'POW:' + value + '%';\n"
+"            }\n"
+"        };\n"
+"    request.onerror = function () {\n"
+"      alert('ERROR');\n"
+"    };\n"
+"    let data ={'filenumber':filenumber, 'description': description, 'table':rows};\n"
+"    let json_str = JSON.stringify(data);\n"
+"    request.send(json_str);\n"
+"  }\n"
+"  </script>\n";
+
     server.send(200, "text/HTML", index_html);
     digitalWrite(pinLED, LOW);
+}
+void handleApiTableLoad() {
+    if (server.hasArg("plain")) {
+        String body = server.arg("plain");
+        DeserializationError error = deserializeJson(jsondoc_temp, body);
+        String filenumber = jsondoc_temp["filenumber"];
+
+        String file_name = "/" + filenumber + ".json";
+        if (SPIFFS.exists(file_name)){
+            File fp = SPIFFS.open(file_name,"r");
+            if (fp) {
+                String json_str = fp.readString();
+                fp.close();
+                Serial.println("read file sccess.");
+                Serial.println(json_str);
+                
+                DeserializationError error = deserializeJson(jsondoc_temp, json_str);
+                jsondoc_temp["result"] = "OK";
+                String response;
+                serializeJson(jsondoc_temp, response);
+                server.send(200, "application/json", response);
+            } else {
+                Serial.println("INFO:read file failed. create new.");
+                server.send(200, "application/json", "{\"result\":\"OK\", \"description\":\"\", \"table\":[]}");
+            }
+        } else {
+            Serial.println("INFO:file not found. create new.");
+            server.send(200, "application/json", "{\"result\":\"OK\", \"description\":\"\", \"table\":[]}");
+        }
+    } else {
+        Serial.println("ERROR: server.hasArg(\"plain\") = false");
+        server.send(200, "application/json", "{\"result\":\"ERROR\"}");
+    }
+}
+static const int table_col_led = 0;
+static const int table_col_brake = 1;
+static const int table_col_power = 2;
+
+void handleApiTableSave() {
+    if (server.hasArg("plain")) {
+        String body = server.arg("plain");
+        Serial.println(body);
+        DeserializationError error = deserializeJson(jsondoc_temp, body);
+        String filenumber = jsondoc_temp["filenumber"];
+        String description = jsondoc_temp["description"];
+        Serial.println(filenumber);
+        Serial.println(description);
+        for (int i=0; i< jsondoc_temp["table"].size(); i++) {
+            String led = jsondoc_temp["table"][i][table_col_led];
+            Serial.println(led);
+            String brake = jsondoc_temp["table"][i][table_col_brake];
+            Serial.println(brake);
+            String power = jsondoc_temp["table"][i][table_col_power];
+            Serial.println(power);
+        }
+        // write to spiffs file
+        File fp = SPIFFS.open("/" + filenumber + ".json","w");
+        if (fp) {
+            fp.print(body + "\n");
+            fp.close();
+            Serial.println("write file sccess.");
+        } else {
+            Serial.println("ERROR: write_highscore failed.");
+            server.send(200, "application/json", "{\"result\":\"ERROR\"}");
+        }
+        server.send(200, "application/json", "{\"result\":\"OK\"}");
+    } else {
+        Serial.println("ERROR: server.hasArg(\"plain\") = false");
+        server.send(200, "application/json", "{\"result\":\"ERROR\"}");
+    }
+}
+
+void handleApiRunStart() {
+    if (server.hasArg("plain")) {
+        String body = server.arg("plain");
+        Serial.println(body);
+        DeserializationError error = deserializeJson(jsondoc_table, body);
+        String filenumber = jsondoc_table["filenumber"];
+        String description = jsondoc_table["description"];
+        Serial.println(filenumber);
+        Serial.println(description);
+        for (int i=0; i< jsondoc_table["table"].size(); i++) {
+            String led = jsondoc_table["table"][i][table_col_led];
+            Serial.println(led);
+            String brake = jsondoc_table["table"][i][table_col_brake];
+            Serial.println(brake);
+            String power = jsondoc_table["table"][i][table_col_power];
+            Serial.println(power);
+        }
+        status_section_id = 0;
+        status_section_count = jsondoc_table["table"].size();
+        status_running = 1;
+        server.send(200, "application/json", "{\"result\":\"OK\"}");
+    } else {
+        Serial.println("ERROR: server.hasArg(\"plain\") = false");
+        server.send(200, "application/json", "{\"result\":\"ERROR\"}");
+    }
+}
+void handleApiRunStop() {
+    status_running = 0;
+    String res = "{\"result\":\"OK\"}";
+    server.send(200, "application/json", res);
 }
 
 void handleApi() {
