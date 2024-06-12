@@ -27,6 +27,18 @@ const int pwm_freq = 30;
 const int pwm_bit = 8;
 const int pwm_max = (1 << pwm_bit);
 
+const int pinLedR = 16;
+const int pinLedG = 18;
+const int pinLedB = 27;
+const int pinLedY = 33;
+const int pinLedP = 21;
+const int DRAIN_LED_ON = 0;
+const int DRAIN_LED_OFF = 1;
+const int pinMagL = 36;
+const int pinMagR = 39;
+const int threshold_n = 2050;
+const int threshold_s = 1800;
+
 WebServer server(80);
 String current_ipaddr = "";
 
@@ -88,6 +100,18 @@ void setup()
     pinMode(pinLED, OUTPUT);
     pinMode(pin_f, OUTPUT);
     digitalWrite(pin_f, LOW);
+    pinMode(pinLedR, OUTPUT_OPEN_DRAIN);
+    pinMode(pinLedG, OUTPUT_OPEN_DRAIN);
+    pinMode(pinLedB, OUTPUT_OPEN_DRAIN);
+    pinMode(pinLedY, OUTPUT_OPEN_DRAIN);
+    pinMode(pinLedP, OUTPUT_OPEN_DRAIN);
+    digitalWrite(pinLedR, DRAIN_LED_OFF);
+    digitalWrite(pinLedG, DRAIN_LED_OFF);
+    digitalWrite(pinLedB, DRAIN_LED_OFF);
+    digitalWrite(pinLedY, DRAIN_LED_OFF);
+    digitalWrite(pinLedP, DRAIN_LED_OFF);
+    pinMode(pinMagL, ANALOG);
+    pinMode(pinMagR, ANALOG);
     // setup pwm
     ledcSetup(pwm_ch_f, pwm_freq, pwm_bit);
     ledcAttachPin(pin_f, pwm_ch_f);
@@ -225,9 +249,9 @@ void handleApiTableLoad() {
         server.send(200, "application/json", "{\"result\":\"ERROR\"}");
     }
 }
-static const int table_col_led = 0;
-static const int table_col_brake = 1;
-static const int table_col_power = 2;
+static const int TABLE_COL_LED = 0;
+static const int TABLE_COL_BRAKE = 1;
+static const int TABLE_COL_POWER = 2;
 
 void handleApiTableSave() {
     if (server.hasArg("plain")) {
@@ -239,11 +263,11 @@ void handleApiTableSave() {
         Serial.println(filenumber);
         Serial.println(description);
         for (int i=0; i< jsondoc_temp["table"].size(); i++) {
-            String led = jsondoc_temp["table"][i][table_col_led];
+            String led = jsondoc_temp["table"][i][TABLE_COL_LED];
             Serial.println(led);
-            String brake = jsondoc_temp["table"][i][table_col_brake];
+            String brake = jsondoc_temp["table"][i][TABLE_COL_BRAKE];
             Serial.println(brake);
-            String power = jsondoc_temp["table"][i][table_col_power];
+            String power = jsondoc_temp["table"][i][TABLE_COL_POWER];
             Serial.println(power);
         }
         // write to spiffs file
@@ -274,11 +298,11 @@ void handleApiRunStart() {
         Serial.println(filenumber);
         Serial.println(description);
         for (int i=0; i< jsondoc_table["table"].size(); i++) {
-            String led = jsondoc_table["table"][i][table_col_led];
+            String led = jsondoc_table["table"][i][TABLE_COL_LED];
             Serial.println(led);
-            String brake = jsondoc_table["table"][i][table_col_brake];
+            String brake = jsondoc_table["table"][i][TABLE_COL_BRAKE];
             Serial.println(brake);
-            String power = jsondoc_table["table"][i][table_col_power];
+            String power = jsondoc_table["table"][i][TABLE_COL_POWER];
             Serial.println(power);
         }
         */
@@ -327,25 +351,72 @@ void handleNotFound() {
   digitalWrite(pinLED, LOW);
 }
 
+static int target_power = 0;
 static int current_power = 0;
+static int brake_time = 0;
+static bool marker_detected_prev = false;
+static uint32_t latest_section_change_millis = 0;
+static const uint32_t section_change_threshold = 100;
 void loop2(void * params) {
     while (true) {
-        int target_power = status_power * status_running;
-        if (current_power == target_power) {
+        if (status_running==0) {
+            delay(1);
+            continue;
+        }
+        // any marker detected
+        int mgl = analogRead(pinMagL);
+        int mgr = analogRead(pinMagR);
+        bool marker_detected_curr = 
+            (mgl < threshold_s) | (threshold_n < mgl) | 
+            (mgr < threshold_s) | (threshold_n < mgr);
+        uint32_t curr_millis = millis();
+        if (marker_detected_prev != marker_detected_curr) {
+            // section change filter timer
+            uint32_t past_millis = curr_millis - latest_section_change_millis;
+            if (section_change_threshold > past_millis) {
+                // section change
+                latest_section_change_millis = curr_millis;
+                // led
+                status_section_id = (status_section_id + 1) % status_section_count;
+                String led_str = jsondoc_table["table"][status_section_id][TABLE_COL_LED];
+                digitalWrite(pinLedR, !(led_str=="r" || led_str == "R")/*OPEN_DRAIN*/ );
+                digitalWrite(pinLedG, !(led_str=="g" || led_str == "G")/*OPEN_DRAIN*/ );
+                digitalWrite(pinLedB, !(led_str=="b" || led_str == "B")/*OPEN_DRAIN*/ );
+                digitalWrite(pinLedY, !(led_str=="y" || led_str == "Y")/*OPEN_DRAIN*/ );
+                // power
+                String power_str = jsondoc_table["table"][status_section_id][TABLE_COL_POWER];
+                target_power = min( max((int)power_str.toInt(),0), 100); //%
+                // break
+                String brake_str = jsondoc_table["table"][status_section_id][TABLE_COL_BRAKE];
+                brake_time = brake_str.toInt();
+            }
+        }
+
+        if (curr_millis - latest_section_change_millis < brake_time) {
+            // break
+            //ledcWrite(pwm_ch_f, pwm_max);
+            // TODO:break pin
+            ledcWrite(pwm_ch_f, 0);
+            digitalWrite(pinLedP, DRAIN_LED_ON);
+        } else {
+            // drive
+            digitalWrite(pinLedP, DRAIN_LED_OFF);
+            if (current_power == target_power) {
             // do nothing
-        } else if (target_power==0){
-            current_power = 0;
-            ledcWrite(pwm_ch_f, current_power);
-        } else if (current_power < target_power) {
-            current_power++;
-            Serial.print("current_power");
-            Serial.println(current_power);
-            ledcWrite(pwm_ch_f, (pwm_max * current_power) / 100);
-        } else if (target_power < current_power) {
-            current_power--;
-            Serial.print("current_power");
-            Serial.println(current_power);
-            ledcWrite(pwm_ch_f, (pwm_max * current_power) / 100);
+            } else if (target_power==0){
+                current_power = 0;
+                ledcWrite(pwm_ch_f, current_power);
+            } else if (current_power < target_power) {
+                current_power++;
+                Serial.print("current_power");
+                Serial.println(current_power);
+                ledcWrite(pwm_ch_f, (pwm_max * current_power) / 100);
+            } else if (target_power < current_power) {
+                current_power--;
+                Serial.print("current_power");
+                Serial.println(current_power);
+                ledcWrite(pwm_ch_f, (pwm_max * current_power) / 100);
+            }
         }
         delay(1);
     }
