@@ -18,8 +18,8 @@
     <div class='center'>
       <h2>baby tram</h2>
       <p><nobr>
-        <button type='button' onclick=set_value('run',1)> <b>RUN</b> </button>
-        <button type='button' onclick=set_value('run',0)> <b>STOP</b> </button>
+        <button type='button' onclick=run_start()> <b>RUN</b> </button>
+        <button type='button' onclick=run_stop()> <b>STOP</b> </button>
       </nobr></p>
       <b><font size='5'><a id='run'> STOP </a></font></b>
 
@@ -57,28 +57,64 @@
   </div>
   </body>
   <script language='javascript' type='text/javascript'>
-  function set_value(item, value) {
+  function run_start() {
     var request = new XMLHttpRequest();
-    request.open('GET', '/api?item=' + item + '&value=' + value , true);
+    request.open('POST', '/api/run/start', true);
+    request.responseType = 'json';
+    request.setRequestHeader('Content-Type', 'application/json');
+    request.onload = function () {
+            let data = this.response;
+            let result = data.result;
+            if (result!='OK') {
+                alert('ERROR');
+            } else {
+                document.getElementById('run').textContent = 'RUN';
+            }
+        };
+    request.onerror = function () {
+      alert('ERROR');
+    };
+    let rows = get_table_rows();
+    let data ={'table':rows};
+    let json_str = JSON.stringify(data);
+    request.send(json_str);
+  }
+  function run_stop() {
+    var request = new XMLHttpRequest();
+    request.open('GET', '/api/run/stop' , true);
     request.responseType = 'json';
     request.onload = function () {
             let data = this.response;
             let result = data.result;
-            let item = data.item;
-            let value = data.value;
             if (result!='OK') {
                 alert('ERROR');
-            } else if (item=='run') {
-                document.getElementById('run').textContent = value;
-            } else if (item=='power') {
-                document.getElementById('power_progress').value = value;
-                document.getElementById('power_value').textContent = 'POW:' + value + '%';
+            } else {
+                document.getElementById('run').textContent = 'STOP';
             }
         };
     request.onerror = function () {
       alert('ERROR');
     };
     request.send();
+  }
+  function get_table_rows() {
+    let tb = document.getElementById('tbody');
+    const col_limit = 3;
+    let rows = [];
+    for (let row of tb.rows) {
+        let cols = [];
+        let col_num = 0;
+        for(let cell of row.cells){
+            col_num += 1;
+            if (col_num <= col_limit) {
+                cols.push(cell.innerText);
+            }
+            //console.log(cell.innerText);
+        }
+        rows.push(cols);
+    }
+    //console.log(rows);
+    return rows;
   }
   function add_row(color, brake, poower) {
     var tb = document.getElementById('tbody');
@@ -136,24 +172,6 @@
     if (false == window.confirm(filenumber + ':' + description + '\\n' + 'save ok ?')) {
         return;
     }
-
-    let tb = document.getElementById('tbody');
-    const col_limit = 3;
-    let rows = [];
-    for (let row of tb.rows) {
-        let cols = [];
-        let col_num = 0;
-        for(let cell of row.cells){
-            col_num += 1;
-            if (col_num <= col_limit) {
-                cols.push(cell.innerText);
-            }
-            console.log(cell.innerText);
-        }
-        rows.push(cols);
-    }
-    console.log(rows);
-
     var request = new XMLHttpRequest();
     request.open('POST', '/api/table/save', true);
     request.responseType = 'json';
@@ -175,6 +193,7 @@
     request.onerror = function () {
       alert('ERROR');
     };
+    let rows = get_table_rows();
     let data ={'filenumber':filenumber, 'description': description, 'table':rows};
     let json_str = JSON.stringify(data);
     request.send(json_str);
