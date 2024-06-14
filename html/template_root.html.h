@@ -35,7 +35,7 @@
 "<br>\n"
 "<p><nobr>\n"
 "<a>Desc.</a>\n"
-"<input type='text' id='description'size='34' />\n"
+"<input type='text' id='description'size='24' />\n"
 "</nobr></p>\n"
 "<table border='1' style='border: 1px solid black; border-collapse: collapse;' id='table'>\n"
 "<thead>\n"
