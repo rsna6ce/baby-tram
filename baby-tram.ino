@@ -9,6 +9,11 @@
 #include <SPIFFS.h>
 #include <stdint.h>
 
+// Arduino debug print
+#define TOSTR(x) #x
+#define TOSTRX(x) TOSTR(x)
+#define DEBUG_PRINT_VARIABLE(x) Serial.print(TOSTRX(x));Serial.print(":");Serial.println(x);
+
 //static ssid and pass (if not use set "")
 static char* ssid = "";
 static char* password = "";
@@ -22,7 +27,9 @@ static int wifi_status = WL_DISCONNECTED;
 const int pinSW = 0;
 const int pinLED = 2;
 const int pin_f = 26;
+const int pin_r = 25;
 const int pwm_ch_f = 1;
+const int pwm_ch_r = 2;
 const int pwm_freq = 30;
 const int pwm_bit = 8;
 const int pwm_max = (1 << pwm_bit);
@@ -99,7 +106,9 @@ void setup()
     pinMode(pinSW, INPUT_PULLUP);
     pinMode(pinLED, OUTPUT);
     pinMode(pin_f, OUTPUT);
+    pinMode(pin_r, OUTPUT);
     digitalWrite(pin_f, LOW);
+    digitalWrite(pin_r, LOW);
     pinMode(pinLedR, OUTPUT_OPEN_DRAIN);
     pinMode(pinLedG, OUTPUT_OPEN_DRAIN);
     pinMode(pinLedB, OUTPUT_OPEN_DRAIN);
@@ -114,8 +123,11 @@ void setup()
     pinMode(pinMagR, ANALOG);
     // setup pwm
     ledcSetup(pwm_ch_f, pwm_freq, pwm_bit);
+    ledcSetup(pwm_ch_r, pwm_freq, pwm_bit);
     ledcAttachPin(pin_f, pwm_ch_f);
+    ledcAttachPin(pin_r, pwm_ch_r);
     ledcWrite(pwm_ch_f, 0);
+    ledcWrite(pwm_ch_r, 0);
 
     // wifi setting
     Serial.println("To specify the SSID, press the y key within 3 seconds.");
@@ -190,7 +202,6 @@ void setup()
     SPIFFS.begin(true);
 
     server.on("/", handleRoot);
-    server.on("/api",handleApi);
     server.on("/api/run/start", handleApiRunStart);
     server.on("/api/run/stop", handleApiRunStop);
     server.on("/api/table/load", handleApiTableLoad);
@@ -308,6 +319,7 @@ void handleApiRunStart() {
         */
         status_section_id = 0;
         status_section_count = jsondoc_table["table"].size();
+        set_section(status_section_id);
         status_running = 1;
         server.send(200, "application/json", "{\"result\":\"OK\"}");
     } else {
@@ -321,30 +333,6 @@ void handleApiRunStop() {
     server.send(200, "application/json", res);
 }
 
-void handleApi() {
-    digitalWrite(pinLED, HIGH);
-    String item_str = server.arg("item");
-    String value_str = server.arg("value");
-    int value = value_str.toInt();
-    String res = "{\"result\":\"ERROR\"}";
-
-    if (item_str == "run") {
-        status_running = value;
-        String status_running_str = status_running!=0 ? "RUN" : "STOP";
-        res = "OK.";
-        res = "{\"result\":\"OK\", \"item\":\"run\", \"value\":\"" + status_running_str + "\"}";
-    } else if (item_str == "power"){
-        int temp_value = status_power + value;
-        temp_value = max(0, temp_value);
-        temp_value = min(temp_value, 100);
-        status_power = temp_value;
-        res = "{\"result\":\"OK\", \"item\":\"power\", \"value\":" + String(status_power) + "}";
-    }
-    //Serial.println(res);
-    server.send(200, "application/json", res);
-    digitalWrite(pinLED, LOW);
-}
-
 void handleNotFound() {
   digitalWrite(pinLED, HIGH);
   server.send(404, "text/plain", "404 page not found.");
@@ -354,13 +342,36 @@ void handleNotFound() {
 static int target_power = 0;
 static int current_power = 0;
 static int brake_time = 0;
+void set_section(int section_id) {
+    // led
+    String led_str = jsondoc_table["table"][section_id][TABLE_COL_LED];
+    digitalWrite(pinLedR, !(led_str=="r" || led_str == "R")/*OPEN_DRAIN*/ );
+    digitalWrite(pinLedG, !(led_str=="g" || led_str == "G")/*OPEN_DRAIN*/ );
+    digitalWrite(pinLedB, !(led_str=="b" || led_str == "B")/*OPEN_DRAIN*/ );
+    digitalWrite(pinLedY, !(led_str=="y" || led_str == "Y")/*OPEN_DRAIN*/ );
+    // power
+    String power_str = jsondoc_table["table"][section_id][TABLE_COL_POWER];
+    target_power = min( max((int)power_str.toInt(),0), 100); //%
+    // brake
+    String brake_str = jsondoc_table["table"][section_id][TABLE_COL_BRAKE];
+    brake_time = brake_str.toInt();
+    // debug print
+    Serial.println("section change!!");
+    DEBUG_PRINT_VARIABLE(section_id);
+    DEBUG_PRINT_VARIABLE(led_str);
+    DEBUG_PRINT_VARIABLE(target_power);
+    DEBUG_PRINT_VARIABLE(brake_time);
+}
+
 static bool marker_detected_prev = false;
 static uint32_t latest_section_change_millis = 0;
 static const uint32_t section_change_threshold = 100;
 void loop2(void * params) {
     while (true) {
         if (status_running==0) {
-            delay(1);
+            delay(10);
+            current_power = 0;
+            ledcWrite(pwm_ch_f, current_power);
             continue;
         }
         // any marker detected
@@ -369,38 +380,32 @@ void loop2(void * params) {
         bool marker_detected_curr = 
             (mgl < threshold_s) | (threshold_n < mgl) | 
             (mgr < threshold_s) | (threshold_n < mgr);
+        //DEBUG_PRINT_VARIABLE(mgl);
+        //DEBUG_PRINT_VARIABLE(mgr);
+        //DEBUG_PRINT_VARIABLE(marker_detected_curr);
         uint32_t curr_millis = millis();
         if (marker_detected_prev != marker_detected_curr) {
+            marker_detected_prev = marker_detected_curr;
             // section change filter timer
             uint32_t past_millis = curr_millis - latest_section_change_millis;
-            if (section_change_threshold > past_millis) {
+            if (marker_detected_curr && (section_change_threshold < past_millis)) {
                 // section change
                 latest_section_change_millis = curr_millis;
-                // led
                 status_section_id = (status_section_id + 1) % status_section_count;
-                String led_str = jsondoc_table["table"][status_section_id][TABLE_COL_LED];
-                digitalWrite(pinLedR, !(led_str=="r" || led_str == "R")/*OPEN_DRAIN*/ );
-                digitalWrite(pinLedG, !(led_str=="g" || led_str == "G")/*OPEN_DRAIN*/ );
-                digitalWrite(pinLedB, !(led_str=="b" || led_str == "B")/*OPEN_DRAIN*/ );
-                digitalWrite(pinLedY, !(led_str=="y" || led_str == "Y")/*OPEN_DRAIN*/ );
-                // power
-                String power_str = jsondoc_table["table"][status_section_id][TABLE_COL_POWER];
-                target_power = min( max((int)power_str.toInt(),0), 100); //%
-                // break
-                String brake_str = jsondoc_table["table"][status_section_id][TABLE_COL_BRAKE];
-                brake_time = brake_str.toInt();
+                set_section(status_section_id);
             }
         }
 
         if (curr_millis - latest_section_change_millis < brake_time) {
-            // break
-            //ledcWrite(pwm_ch_f, pwm_max);
-            // TODO:break pin
-            ledcWrite(pwm_ch_f, 0);
-            digitalWrite(pinLedP, DRAIN_LED_ON);
+            // brake on
+            ledcWrite(pwm_ch_f, pwm_max);
+            ledcWrite(pwm_ch_r, pwm_max);
         } else {
-            // drive
+            // brake off
+            ledcWrite(pwm_ch_r, 0);
             digitalWrite(pinLedP, DRAIN_LED_OFF);
+
+            // drive
             if (current_power == target_power) {
             // do nothing
             } else if (target_power==0){
@@ -408,13 +413,11 @@ void loop2(void * params) {
                 ledcWrite(pwm_ch_f, current_power);
             } else if (current_power < target_power) {
                 current_power++;
-                Serial.print("current_power");
-                Serial.println(current_power);
+                //DEBUG_PRINT_VARIABLE(current_power);
                 ledcWrite(pwm_ch_f, (pwm_max * current_power) / 100);
             } else if (target_power < current_power) {
                 current_power--;
-                Serial.print("current_power");
-                Serial.println(current_power);
+                //DEBUG_PRINT_VARIABLE(current_power);
                 ledcWrite(pwm_ch_f, (pwm_max * current_power) / 100);
             }
         }
