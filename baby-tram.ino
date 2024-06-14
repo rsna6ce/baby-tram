@@ -369,20 +369,16 @@ static const uint32_t section_change_threshold = 100;
 void loop2(void * params) {
     while (true) {
         if (status_running==0) {
-            delay(10);
             current_power = 0;
             ledcWrite(pwm_ch_f, current_power);
+            delay(10);
             continue;
         }
         // any marker detected
         int mgl = analogRead(pinMagL);
         int mgr = analogRead(pinMagR);
-        bool marker_detected_curr = 
-            (mgl < threshold_s) | (threshold_n < mgl) | 
-            (mgr < threshold_s) | (threshold_n < mgr);
-        //DEBUG_PRINT_VARIABLE(mgl);
-        //DEBUG_PRINT_VARIABLE(mgr);
-        //DEBUG_PRINT_VARIABLE(marker_detected_curr);
+        // poleN only
+        bool marker_detected_curr = (threshold_n < mgl) | (threshold_n < mgr);
         uint32_t curr_millis = millis();
         if (marker_detected_prev != marker_detected_curr) {
             marker_detected_prev = marker_detected_curr;
@@ -390,6 +386,8 @@ void loop2(void * params) {
             uint32_t past_millis = curr_millis - latest_section_change_millis;
             if (marker_detected_curr && (section_change_threshold < past_millis)) {
                 // section change
+                //DEBUG_PRINT_VARIABLE(mgl);
+                //DEBUG_PRINT_VARIABLE(mgr);
                 latest_section_change_millis = curr_millis;
                 status_section_id = (status_section_id + 1) % status_section_count;
                 set_section(status_section_id);
@@ -400,6 +398,7 @@ void loop2(void * params) {
             // brake on
             ledcWrite(pwm_ch_f, pwm_max);
             ledcWrite(pwm_ch_r, pwm_max);
+            digitalWrite(pinLedP, DRAIN_LED_ON);
         } else {
             // brake off
             ledcWrite(pwm_ch_r, 0);
