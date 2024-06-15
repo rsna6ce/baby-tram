@@ -370,8 +370,8 @@ void loop2(void * params) {
     while (true) {
         if (status_running==0) {
             current_power = 0;
-            ledcWrite(pwm_ch_f, current_power);
-            ledcWrite(pwm_ch_r, current_power);
+            ledcWrite(pwm_ch_f, 0);
+            ledcWrite(pwm_ch_r, 0);
             delay(10);
             continue;
         }
@@ -410,13 +410,15 @@ void loop2(void * params) {
             // do nothing
             } else if (target_power==0){
                 current_power = 0;
-                ledcWrite(pwm_ch_f, current_power);
+                ledcWrite(pwm_ch_f, 0);
             } else if (current_power < target_power) {
-                current_power++;
+                current_power = target_power; //direct acceleration 
+                //current_power++;
                 //DEBUG_PRINT_VARIABLE(current_power);
                 ledcWrite(pwm_ch_f, (pwm_max * current_power) / 100);
             } else if (target_power < current_power) {
-                current_power--;
+                current_power = target_power; //direct deceleration
+                //current_power--;
                 //DEBUG_PRINT_VARIABLE(current_power);
                 ledcWrite(pwm_ch_f, (pwm_max * current_power) / 100);
             }
