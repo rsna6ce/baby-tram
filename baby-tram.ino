@@ -371,6 +371,7 @@ void loop2(void * params) {
         if (status_running==0) {
             current_power = 0;
             ledcWrite(pwm_ch_f, current_power);
+            ledcWrite(pwm_ch_r, current_power);
             delay(10);
             continue;
         }
