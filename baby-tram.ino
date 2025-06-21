@@ -28,8 +28,6 @@ const int pinSW = 0;
 const int pinLED = 2;
 const int pin_f = 26;
 const int pin_r = 25;
-const int pwm_ch_f = 1;
-const int pwm_ch_r = 2;
 const int pwm_freq = 30;
 const int pwm_bit = 8;
 const int pwm_max = (1 << pwm_bit);
@@ -122,12 +120,10 @@ void setup()
     pinMode(pinMagL, ANALOG);
     pinMode(pinMagR, ANALOG);
     // setup pwm
-    ledcSetup(pwm_ch_f, pwm_freq, pwm_bit);
-    ledcSetup(pwm_ch_r, pwm_freq, pwm_bit);
-    ledcAttachPin(pin_f, pwm_ch_f);
-    ledcAttachPin(pin_r, pwm_ch_r);
-    ledcWrite(pwm_ch_f, 0);
-    ledcWrite(pwm_ch_r, 0);
+    ledcAttach(pin_f, pwm_freq, pwm_bit);
+    ledcAttach(pin_r, pwm_freq, pwm_bit);
+    ledcWrite(pin_f, 0);
+    ledcWrite(pin_r, 0);
 
     // wifi setting
     Serial.println("To specify the SSID, press the y key within 3 seconds.");
@@ -370,8 +366,8 @@ void loop2(void * params) {
     while (true) {
         if (status_running==0) {
             current_power = 0;
-            ledcWrite(pwm_ch_f, 0);
-            ledcWrite(pwm_ch_r, 0);
+            ledcWrite(pin_f, 0);
+            ledcWrite(pin_r, 0);
             delay(10);
             continue;
         }
@@ -397,12 +393,12 @@ void loop2(void * params) {
 
         if (curr_millis - latest_section_change_millis < brake_time) {
             // brake on
-            ledcWrite(pwm_ch_f, pwm_max);
-            ledcWrite(pwm_ch_r, pwm_max);
+            ledcWrite(pin_f, pwm_max);
+            ledcWrite(pin_r, pwm_max);
             digitalWrite(pinLedP, DRAIN_LED_ON);
         } else {
             // brake off
-            ledcWrite(pwm_ch_r, 0);
+            ledcWrite(pin_r, 0);
             digitalWrite(pinLedP, DRAIN_LED_OFF);
 
             // drive
@@ -410,17 +406,17 @@ void loop2(void * params) {
             // do nothing
             } else if (target_power==0){
                 current_power = 0;
-                ledcWrite(pwm_ch_f, 0);
+                ledcWrite(pin_f, 0);
             } else if (current_power < target_power) {
                 current_power = target_power; //direct acceleration 
                 //current_power++;
                 //DEBUG_PRINT_VARIABLE(current_power);
-                ledcWrite(pwm_ch_f, (pwm_max * current_power) / 100);
+                ledcWrite(pin_f, (pwm_max * current_power) / 100);
             } else if (target_power < current_power) {
                 current_power = target_power; //direct deceleration
                 //current_power--;
                 //DEBUG_PRINT_VARIABLE(current_power);
-                ledcWrite(pwm_ch_f, (pwm_max * current_power) / 100);
+                ledcWrite(pin_f, (pwm_max * current_power) / 100);
             }
         }
         delay(1);
